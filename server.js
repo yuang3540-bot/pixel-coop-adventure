@@ -115,4 +115,4 @@ setInterval(() => {
   }
 }, 1000/30);
 
-server.listen(PORT, () => console.log(`Pixel co-op game running on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () => console.log(`Pixel co-op game running on port ${PORT}`));
