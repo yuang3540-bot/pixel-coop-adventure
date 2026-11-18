@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>像素双人冒险</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+SC:wght@500;700;900&display=swap');
+:root{--ink:#17213b;--cream:#fff3cf;--blue:#69d2e7;--orange:#ffb347}
+*{box-sizing:border-box}body{margin:0;background:#171d35;color:var(--cream);font-family:'Noto Sans SC',sans-serif;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:16px}
+.wrap{width:min(100%,1000px)}header{text-align:center;margin-bottom:14px}h1{font-size:clamp(22px,4vw,34px);margin:8px 0;color:#ffe28a;text-shadow:3px 3px #8b4b66;letter-spacing:2px}.sub{color:#b9c5e8;font-size:13px}
+.panel{background:#263354;border:4px solid #56658c;box-shadow:0 8px 0 #0c1227;padding:14px;border-radius:8px;margin-bottom:12px}
+.lobby{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}.lobby input{min-width:110px;max-width:180px;background:#111a31;border:2px solid #7383ae;color:white;padding:11px;border-radius:4px;font-size:15px}.btn{background:#ffe28a;color:#302344;border:0;border-bottom:4px solid #c17b56;padding:12px 16px;font-weight:900;border-radius:4px;cursor:pointer}.btn:active{transform:translateY(2px);border-bottom-width:2px}.status{text-align:center;font-size:13px;color:#c7d7ff;margin-top:10px;min-height:20px}
+.hud{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:900;margin:4px 2px 10px}.pill{background:#10182d;border:2px solid #56658c;padding:8px 12px;border-radius:4px}
+canvas{width:100%;height:auto;display:block;background:#87c9d9;border:5px solid #ffe28a;image-rendering:pixelated;box-shadow:0 8px 0 #0c1227;border-radius:4px;touch-action:none}
+.help{font-size:13px;line-height:1.8;color:#c7d7ff;text-align:center;margin-top:12px}
+.touch{display:none;justify-content:space-between;margin-top:12px;gap:12px}.cluster{display:flex;gap:8px}.touch button{width:62px;height:56px;font-size:20px;background:#34466f;color:white;border:2px solid #91a6dc;border-bottom:5px solid #17213b;border-radius:8px;touch-action:none}
+@media(max-width:700px){body{padding:8px}.panel{padding:10px}.touch{display:flex}.help{font-size:11px}.lobby input{max-width:130px}}
+</style>
+</head>
+<body><main class="wrap">
+<header><h1>PIXEL 双人冒险</h1><div class="sub">TWO HEROES · ONE QUEST · RETRO CO-OP</div></header>
+<section class="panel">
+ <div class="lobby">
+  <input id="name" maxlength="12" placeholder="你的昵称" value="冒险者">
+  <input id="room" maxlength="6" placeholder="房间码（可留空）">
+  <button class="btn" id="join">创建 / 加入房间</button>
+  <button class="btn" id="restart" hidden>重新开始</button>
+ </div>
+ <div class="status" id="status">输入昵称，点击创建房间；把房间码发给朋友即可联机。</div>
+</section>
+<div class="hud"><div class="pill" id="roomLabel">房间：未连接</div><div class="pill" id="coinLabel">宝石：0 / 5</div><div class="pill" id="playersLabel">玩家：0 / 2</div></div>
+<canvas id="game" width="960" height="540"></canvas>
+<div class="touch">
+ <div class="cluster"><button data-key="left">◀</button><button data-key="right">▶</button></div>
+ <div class="cluster"><button data-key="jump">⬆</button></div>
+</div>
+<div class="help">玩家 1：A / D 移动，W 跳跃　·　玩家 2：← / → 移动，↑ 跳跃<br>手机：使用屏幕下方按钮。收集全部 5 颗宝石，两人一起抵达右侧出口！</div>
+</main>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket=io(); const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+let myId=null,roomCode='',joined=false,state=null,playerIndex=-1;
+const keys={left:false,right:false,jump:false};
+function setStatus(s){$('status').textContent=s}
+$('join').onclick=()=>{if(joined)return;setStatus('正在连接房间…');socket.emit('joinGame',{code:$('room').value,name:$('name').value||'冒险者'})};
+$('restart').onclick=()=>socket.emit('restart');
+socket.on('connect',()=>{myId=socket.id});
+socket.on('joined',d=>{joined=true;roomCode=d.code;playerIndex=d.playerIndex;state=d.state;$('roomLabel').textContent='房间：'+roomCode;$('room').value=roomCode;$('room').disabled=true;$('join').disabled=true;$('restart').hidden=false;setStatus('已加入！把房间码 '+roomCode+' 分享给朋友，等待第二位玩家。')});
+socket.on('joinError',m=>setStatus(m));
+socket.on('state',s=>{state=s;$('coinLabel').textContent='宝石：'+s.collected+' / '+s.total;$('playersLabel').textContent='玩家：'+s.playerCount+' / 2';if(s.playerCount===2&&!s.won)setStatus('两位玩家已就位！收集宝石并一起到达出口。');if(s.won)setStatus('🎉 通关成功！两位英雄合作完成冒险！');});
+socket.on('disconnect',()=>{setStatus('连接中断，正在尝试重新连接…');joined=false});
+function send(){if(joined)socket.emit('input',keys)}
+window.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['a','d','w','arrowleft','arrowright','arrowup',' '].includes(k))e.preventDefault();
+if(k==='a'||k==='arrowleft')keys.left=true;if(k==='d'||k==='arrowright')keys.right=true;if(k==='w'||k==='arrowup'||k===' ')keys.jump=true;send()});
+window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='a'||k==='arrowleft')keys.left=false;if(k==='d'||k==='arrowright')keys.right=false;if(k==='w'||k==='arrowup'||k===' ')keys.jump=false;send()});
+document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;const down=e=>{e.preventDefault();keys[k]=true;send()},up=e=>{e.preventDefault();keys[k]=false;send()};b.addEventListener('pointerdown',down);['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,up));});
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function text(t,x,y,size=16,color='#fff3cf'){ctx.font=`bold ${size}px "Noto Sans SC",sans-serif`;ctx.fillStyle='#25304d';ctx.fillText(t,x+2,y+2);ctx.fillStyle=color;ctx.fillText(t,x,y)}
+function draw(){
+ ctx.clearRect(0,0,960,540);
+ // sky and pixel clouds
+ rect(0,0,960,540,'#87c9d9');rect(0,0,960,210,'#9edbe0');
+ for(let i=0;i<7;i++){let x=(i*157+35)%960;rect(x,75,54,12,'#d9f3e9');rect(x+12,63,30,12,'#d9f3e9')}
+ // distant hills
+ for(let i=0;i<6;i++){let x=i*180-30;rect(x,450,120,50,'#6aaf87');rect(x+24,430,70,25,'#6aaf87')}
+ // platforms
+ (state?.platforms||[{x:0,y:500,w:960,h:40}]).forEach(p=>{rect(p.x,p.y,p.w,p.h,'#80543f');rect(p.x,p.y,p.w,7,'#d5a45f');for(let x=p.x+12;x<p.x+p.w-5;x+=28)rect(x,p.y+13,10,4,'#a8734d')});
+ // door
+ const d=state?.door||{x:900,y:450,w:42,h:50};rect(d.x,d.y,d.w,d.h,'#5b397c');rect(d.x+7,d.y+7,d.w-14,d.h-7,'#ffe28a');rect(d.x+27,d.y+28,5,5,'#5b397c');
+ // gems
+ (state?.coins||[]).forEach(c=>{rect(c.x-6,c.y-9,12,18,'#fff08a');rect(c.x-10,c.y-5,20,10,'#ffca55');rect(c.x-3,c.y-5,6,10,'#fff7c4')});
+ // players
+ if(state){const entries=Object.entries(state.players);entries.forEach(([id,p])=>{rect(p.x+4,p.y+4,p.w-8,p.h-4,'#28304d');rect(p.x,p.y+8,p.w,p.h-12,p.color);rect(p.x+4,p.y,p.w-8,12,p.color);rect(p.x+(p.facing>0?17:6),p.y+13,5,5,'#fff');rect(p.x+5,p.y+p.h-4,7,4,'#44304b');rect(p.x+17,p.y+p.h-4,7,4,'#44304b');text(p.name,p.x-8,p.y-8,12,'#fff')})}
+ if(state?.won){rect(240,190,480,120,'#28304d');rect(248,198,464,104,'#ffe28a');text('LEVEL CLEAR!',365,244,30,'#7b4770');text('两位英雄成功会合！',370,278,20,'#34466f')}
+ if(!joined){rect(230,205,500,100,'#28304d');rect(238,213,484,84,'#ffe28a');text('等待勇敢的冒险者…',345,262,24,'#34466f')}
+ requestAnimationFrame(draw);
+}
+draw();
+</script></body></html>
